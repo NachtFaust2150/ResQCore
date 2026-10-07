@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResQCore — AI Disaster Response System</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+    <!-- Connection Banner -->
+    <div id="connection-banner">
+        Connection lost, retrying...
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-icon">R</div>
+            <div>
+                <span class="brand-title">ResQCore</span>
+                <span class="brand-tag">Disaster Engine</span>
+            </div>
+        </div>
+        <div class="user-nav" id="user-nav" style="display: none;">
+            <div class="user-badge">
+                <span class="role-pill" id="user-role-pill">ROLE</span>
+                <span id="user-display-name">User</span>
+            </div>
+            <button class="btn" id="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="app-wrapper">
+        <!-- Login View -->
+        <div id="login-view" class="login-wrapper">
+            <div class="login-card">
+                <h2 class="login-title">ResQCore System Login</h2>
+                <p class="login-subtitle">AI-Assisted Disaster Allocation & Routing</p>
+
+                <div id="login-error" class="alert alert-danger" style="display: none;"></div>
+
+                <form id="login-form" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="username" class="form-control" placeholder="Enter username" required value="admin">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="password" class="form-control" placeholder="Enter password" required value="admin123">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Login to Dashboard</button>
+                </form>
+
+                <div class="demo-credentials">
+                    <strong>Demo Logins:</strong><br>
+                    • Admin: <code>admin</code> / <code>admin123</code><br>
+                    • Rescue Team: <code>rescue1</code> / <code>rescue123</code><br>
+                    • Ambulance 1: <code>amb1</code> / <code>amb123</code><br>
+                    • Hospital A: <code>hosp1</code> / <code>hosp123</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Layout -->
+        <div id="dashboard-view" class="dashboard-grid" style="display: none;">
+            
+            <!-- Left Main Column -->
+            <div class="main-column">
+                
+                <!-- ADMIN VIEW -->
+                <div id="admin-view" class="role-view" style="display: none;">
+                    <div class="metrics-row">
+                        <div class="metric-card">
+                            <div class="metric-title">Ambulances</div>
+                            <div class="metric-value" id="m-amb-status">0 / 5 Free</div>
+                            <div class="metric-sub">OR-Tools CP-SAT Active</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Hospital Beds</div>
+                            <div class="metric-value" id="m-beds-status">0 / 50</div>
+                            <div class="metric-sub" id="m-icu-status">ICU: 0 / 8</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Risk Multiplier</div>
+                            <div class="metric-value" id="m-risk-mult">1.0x</div>
+                            <div class="metric-sub">Dijkstra Weight Factor</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Open Incidents</div>
+                            <div class="metric-value" id="m-incidents-count">0</div>
+                            <div class="metric-sub">Auto Re-planning</div>
+                        </div>
+                    </div>
+
+                    <!-- Simulation Controls Card -->
+                    <div class="panel-card" style="margin-top: 1.25rem;">
+                        <div class="panel-header">
+                            <span>Simulation Controls (Admin)</span>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Triggers Automatic Re-Plan</span>
+                        </div>
+                        <div class="sim-controls">
+                            <button class="btn btn-warning" onclick="triggerSimHospitalFull('H1')">Simulate Hosp A Full</button>
+                            <button class="btn btn-warning" onclick="triggerSimRoadBlock('R3')">Simulate Road R3 Blocked</button>
+                            <button class="btn btn-warning" onclick="triggerSimRiskIncrease(2.0)">Simulate Risk Increase (2.0x)</button>
+                            <button class="btn btn-warning" onclick="triggerSimNewIncident()">Simulate New Emergency (N3)</button>
+                        </div>
+                        <div class="dev-tool-row">
+                            <button class="btn btn-secondary-sm" onclick="triggerSimReset()">Dev tool: Reset Demo State</button>
+                        </div>
+                    </div>
+
+                    <!-- Active Incidents Table -->
+                    <div class="panel-card" style="margin-top: 1.25rem;">
+                        <div class="panel-header">Active Incidents</div>
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Area Node</th>
+                                        <th>Victims (C / S / M)</th>
+                                        <th>Priority Score</th>
+                                        <th>Assigned Ambulances</th>
+                                        <th>Target Hospital</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-incidents-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Ambulance Dispatch Status Table -->
+                    <div class="panel-card" style="margin-top: 1.25rem;">
+                        <div class="panel-header">Ambulance Dispatch Status</div>
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ambulance</th>
+                                        <th>Current Node</th>
+                                        <th>Status</th>
+                                        <th>Assigned Incident</th>
+                                        <th>Target Hospital</th>
+                                        <th>ETA (Inc / Hosp)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-ambulances-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RESCUE VIEW -->
+                <div id="rescue-view" class="role-view" style="display: none;">
+                    <div class="panel-card">
+                        <div class="panel-header">Incident Field Report</div>
+                        <div id="rescue-form-error" class="form-error" style="margin-bottom: 0.75rem;"></div>
+
+                        <form id="field-report-form" onsubmit="submitFieldReport(event)">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label class="label-red">Critical Victims (Red)</label>
+                                    <input type="number" id="rep-critical" class="form-control" min="0" value="2" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-yellow">Serious Victims (Yellow)</label>
+                                    <input type="number" id="rep-serious" class="form-control" min="0" value="3" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="label-green">Moderate Victims (Green)</label>
+                                    <input type="number" id="rep-moderate" class="form-control" min="0" value="3" required>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Field Notes</label>
+                                <textarea id="rep-notes" class="form-control" rows="2" placeholder="Describe hazards, structural damage, access points..."></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Photo Upload</label>
+                                <div class="file-upload-wrapper">
+                                    <label class="file-upload-btn">
+                                        <span id="photo-label-text">Upload photo</span>
+                                        <span style="font-size: 0.75rem; color: var(--accent-primary);">Browse file</span>
+                                        <input type="file" id="rep-photo" class="file-upload-input" accept="image/*" onchange="updateFileName(this)">
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; font-style: italic;">
+                                Location: captured automatically at submit (demo point if unavailable)
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                Submit report
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Recent Field Reports Table -->
+                    <div class="panel-card" style="margin-top: 1.25rem;">
+                        <div class="panel-header">My Team's Field Reports</div>
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Area Node</th>
+                                        <th>Victims (C / S / M)</th>
+                                        <th>Priority</th>
+                                        <th>Status</th>
+                                        <th>Reported At</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rescue-reports-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AMBULANCE VIEW -->
+                <div id="ambulance-view" class="role-view" style="display: none;">
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <span>Ambulance Unit Assignment</span>
+                            <span class="badge badge-available" id="amb-unit-status">AVAILABLE</span>
+                        </div>
+
+                        <div id="amb-no-mission" class="alert alert-info">
+                            Unit is standby at base node. Awaiting automated dispatch allocation.
+                        </div>
+
+                        <div id="amb-mission-card" style="display: none;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                                <div style="background: #0b0f19; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">ASSIGNED INCIDENT</div>
+                                    <div style="font-size: 1.3rem; font-weight: 800;" id="amb-inc-id">INC-001</div>
+                                    <div style="font-size: 0.85rem; margin-top: 0.35rem;" id="amb-inc-victims">2 Critical, 3 Serious, 3 Moderate</div>
+                                </div>
+                                <div style="background: #0b0f19; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">DESTINATION HOSPITAL</div>
+                                    <div style="font-size: 1.3rem; font-weight: 800; color: var(--accent-purple);" id="amb-hosp-name">Hospital A</div>
+                                    <div style="font-size: 0.85rem; margin-top: 0.35rem;" id="amb-hosp-node">Destination Node N5</div>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div style="background: #0b0f19; padding: 0.85rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">ETA BASE TO INCIDENT</div>
+                                    <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-primary);" id="amb-eta-inc">0 min</div>
+                                </div>
+                                <div style="background: #0b0f19; padding: 0.85rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">ETA INCIDENT TO HOSPITAL</div>
+                                    <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-purple);" id="amb-eta-hosp">0 min</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HOSPITAL VIEW -->
+                <div id="hospital-view" class="role-view" style="display: none;">
+                    <div class="metrics-row" style="margin-bottom: 1.25rem;">
+                        <div class="metric-card">
+                            <div class="metric-title">Available General Beds</div>
+                            <div class="metric-value" id="hosp-beds-val">0 / 0</div>
+                            <div class="metric-sub">Regular Ward</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Available ICU Beds</div>
+                            <div class="metric-value" id="hosp-icu-val">0 / 0</div>
+                            <div class="metric-sub">Critical Care</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Trauma Designation</div>
+                            <div class="metric-value" id="hosp-trauma-val" style="font-size: 1.25rem;">Trauma-capable: Yes</div>
+                            <div class="metric-sub">Emergency Unit</div>
+                        </div>
+                    </div>
+
+                    <!-- Update Capacity Form -->
+                    <div class="panel-card">
+                        <div class="panel-header">Hospital Live Capacity Management</div>
+                        <div id="hosp-capacity-error" class="form-error" style="margin-bottom: 0.75rem;"></div>
+
+                        <form id="hospital-capacity-form" onsubmit="submitHospitalCapacity(event)" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 1rem; align-items: flex-end;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label>Available Beds</label>
+                                <input type="number" id="hosp-form-beds" class="form-control" min="0" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label>Available ICU Beds</label>
+                                <input type="number" id="hosp-form-icu" class="form-control" min="0" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Capacity</button>
+                        </form>
+                    </div>
+
+                    <!-- Incoming Ambulances List (Grouped by Incident) -->
+                    <div class="panel-card" style="margin-top: 1.25rem;">
+                        <div class="panel-header">Incoming Ambulances & Inbound Victims</div>
+                        <div id="hospital-incoming-container"></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Column: Shared Map & Adaptation Log -->
+            <div class="side-column">
+                
+                <!-- Map Card -->
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <span>Demo road network (simplified, simulated)</span>
+                    </div>
+                    <div id="map"></div>
+                    
+                    <!-- Map Legend -->
+                    <div class="map-legend">
+                        <div class="legend-item">
+                            <div class="legend-dashed"></div>
+                            <span>Blocked road</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-symbol" style="background: var(--accent-orange);"></div>
+                            <span>High-risk road</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-symbol" style="background: var(--accent-green); border-radius: 50%;"></div>
+                            <span>Hospital</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-symbol" style="background: var(--accent-red); border-radius: 50%;"></div>
+                            <span>Incident</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-symbol" style="background: var(--accent-primary);"></div>
+                            <span>Base to Incident</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-symbol" style="background: var(--accent-purple);"></div>
+                            <span>Incident to Hospital</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Risk Model Panel (ADMIN View Only) -->
+                <div class="panel-card" id="risk-model-panel" style="display: none;">
+                    <div class="panel-header">
+                        <span>Risk Model Interpretability</span>
+                        <span class="badge badge-low" style="font-size: 0.65rem;">RandomForest</span>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                        Feature importances predicting area risk penalty factor:
+                    </div>
+                    <div id="feature-importances-container"></div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); font-style: italic; margin-top: 0.5rem;">
+                        * Notice: Model is trained on synthetic location data. No real accuracy is claimed.
+                    </div>
+                </div>
+
+                <!-- System Adaptation Log (ADMIN & HOSPITAL Views) -->
+                <div class="panel-card" id="adaptation-log-panel" style="display: none;">
+                    <div class="panel-header">
+                        <span>System Adaptation Log</span>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);" id="last-updated-time">Live</span>
+                    </div>
+                    <div class="event-feed" id="event-feed"></div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Application Scripts -->
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/admin.js"></script>
+    <script src="/static/js/rescue.js"></script>
+    <script src="/static/js/ambulance.js"></script>
+    <script src="/static/js/hospital.js"></script>
+</body>
+</html>
